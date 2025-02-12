@@ -20,7 +20,9 @@ const pool = new Pool({
 router.get("/", async (req, res) => {
     try {
         console.log("🔍 Fetching all users from the database...");
-        const users = await pool.query("SELECT id, username, profile_pic, banner, platforms, genres FROM users;");
+        const users = await pool.query(
+            "SELECT id, username, profile_pic, banner, platforms, genres FROM users;"
+        );
         console.log("✅ Users Retrieved:", users.rows);
         res.json(users.rows);
     } catch (error) {
@@ -49,10 +51,10 @@ router.post("/update-username", async (req, res) => {
         }
 
         // ✅ Update all posts to reflect the new username
-        await pool.query("UPDATE posts SET username = $1 WHERE LOWER(username) = LOWER($2)", [
-            newUsername,
-            oldUsername,
-        ]);
+        await pool.query(
+            "UPDATE posts SET username = $1 WHERE LOWER(username) = LOWER($2)",
+            [newUsername, oldUsername]
+        );
 
         res.json({
             success: true,
@@ -102,9 +104,19 @@ router.post("/upload-profile-pic", upload.single("profilePic"), async (req, res)
         const fileBuffer = req.file.buffer.toString("base64"); // Convert to base64
 
         // Store base64 image in DB (Slower - consider cloud storage instead)
-        await pool.query("UPDATE users SET profile_pic = $1 WHERE LOWER(username) = LOWER($2)", [fileBuffer, username]);
+        const updatePic = await pool.query(
+            "UPDATE users SET profile_pic = $1 WHERE LOWER(username) = LOWER($2) RETURNING profile_pic",
+            [fileBuffer, username]
+        );
 
-        res.json({ message: "Profile picture updated successfully", profilePic: fileBuffer });
+        if (updatePic.rowCount === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.json({
+            message: "Profile picture updated successfully",
+            profilePic: updatePic.rows[0].profile_pic,
+        });
     } catch (error) {
         console.error("🚨 Error uploading profile picture:", error.message);
         res.status(500).json({ error: "Failed to upload profile picture" });
@@ -116,12 +128,20 @@ router.post("/update-preferences", async (req, res) => {
     try {
         const { username, platforms, genres } = req.body;
 
-        await pool.query(
-            "UPDATE users SET platforms = $1, genres = $2 WHERE LOWER(username) = LOWER($3)",
+        const updatePref = await pool.query(
+            "UPDATE users SET platforms = $1, genres = $2 WHERE LOWER(username) = LOWER($3) RETURNING platforms, genres",
             [JSON.stringify(platforms), JSON.stringify(genres), username]
         );
 
-        res.json({ message: "Preferences updated successfully" });
+        if (updatePref.rowCount === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.json({
+            message: "Preferences updated successfully",
+            platforms: updatePref.rows[0].platforms,
+            genres: updatePref.rows[0].genres,
+        });
     } catch (error) {
         console.error("🚨 Error updating preferences:", error.message);
         res.status(500).json({ error: "Failed to update preferences" });
