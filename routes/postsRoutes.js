@@ -31,6 +31,8 @@ pool.connect((err, client, release) => {
 // ✅ Fetch new Twitch token for IGDB API
 async function getTwitchToken() {
     try {
+        console.log("🔑 Fetching new Twitch Access Token...");
+        
         const response = await fetch("https://id.twitch.tv/oauth2/token", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -42,21 +44,23 @@ async function getTwitchToken() {
         });
 
         const data = await response.json();
+
         if (data.access_token) {
             IGDB_ACCESS_TOKEN = data.access_token;
-            console.log("✅ New IGDB Access Token:", IGDB_ACCESS_TOKEN);
+            console.log("✅ New IGDB Access Token Set:", IGDB_ACCESS_TOKEN);
         } else {
-            throw new Error("Failed to get Twitch token");
+            throw new Error("⚠️ Failed to retrieve Twitch token");
         }
     } catch (error) {
-        console.error("🚨 Failed to get Twitch token", error.message);
+        console.error("🚨 Twitch Token Fetch Error:", error.message);
     }
 }
 
 // ✅ Fetch game details from IGDB with correct query format
+// ✅ Fetch game details from IGDB API properly
 async function fetchGameDetails(gameId) {
     try {
-        if (!IGDB_ACCESS_TOKEN) await getTwitchToken(); // Ensure token is always valid
+        if (!IGDB_ACCESS_TOKEN) await getTwitchToken(); // Ensure valid token
 
         console.log(`🔍 Fetching game details from IGDB for Game ID: ${gameId}`);
 
@@ -67,15 +71,18 @@ async function fetchGameDetails(gameId) {
                 "Authorization": `Bearer ${IGDB_ACCESS_TOKEN}`,
                 "Content-Type": "text/plain",
             },
-            body: `fields id, name; where id = ${parseInt(gameId, 10)};`
+            body: `fields id, name; where id = ${parseInt(gameId, 10)};`,
         });
 
         const data = await response.json();
+        
         if (!Array.isArray(data) || data.length === 0) {
+            console.log(`⚠️ IGDB API returned no results for Game ID: ${gameId}`);
             return { id: gameId, name: "Unknown Game" };
         }
 
-        return { id: data[0].id, name: data[0].name };
+        console.log(`✅ Found Game: ${data[0].name}`);
+        return { id: data[0].id, name: data[0].name }; // ✅ Ensure name is returned
     } catch (error) {
         console.error("🚨 Error fetching game from IGDB API:", error.message);
         return { id: gameId, name: "Unknown Game" };
@@ -113,6 +120,7 @@ router.post("/", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
+        // ✅ Ensure user exists
         const userResult = await pool.query("SELECT id, profile_pic FROM users WHERE username = $1", [username]);
         if (userResult.rowCount === 0) {
             return res.status(404).json({ error: "User not found" });
@@ -122,21 +130,28 @@ router.post("/", async (req, res) => {
         const profile_pic = userResult.rows[0].profile_pic || "https://placehold.co/50";
 
         let game_name = "Unknown Game";
+
+        // ✅ Check if game exists in DB
         const gameQuery = await pool.query("SELECT name FROM games WHERE id = $1", [game_id]);
         if (gameQuery.rowCount > 0) {
             game_name = gameQuery.rows[0].name;
         } else {
+            // ✅ Fetch from IGDB if not found in DB
             const gameDetails = await fetchGameDetails(game_id);
             game_name = gameDetails.name;
+
+            // ✅ Save new game in DB for future use
             await pool.query("INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", [game_id, game_name]);
         }
 
+        // ✅ Save post with correct game_name
         const result = await pool.query(
             "INSERT INTO posts (user_id, username, content, game_id, game_name, profile_pic) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
             [user_id, username, content, game_id, game_name, profile_pic]
         );
 
-        res.json(result.rows[0]);
+        console.log("✅ Post Created:", result.rows[0]); // Debugging log
+        res.json(result.rows[0]); // ✅ Ensure game_name is sent back
     } catch (error) {
         console.error("🚨 Error posting:", error.message);
         res.status(500).json({ error: "Internal Server Error" });
