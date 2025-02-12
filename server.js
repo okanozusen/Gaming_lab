@@ -22,11 +22,15 @@ console.log("🔍 Database Credentials:", {
 
 const pool = new Pool({
     user: process.env.DB_USER,
-    host: process.env.DB_HOST || "localhost",
-    database: process.env.DB_NAME || "gaming_lab",
-    password: process.env.DB_PASSWORD, // 🔥 Ensure it's a string!
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
+    password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
+    ssl: {
+        rejectUnauthorized: false, // ✅ Allow SSL connections
+    }
 });
+
 
 const app = express();
 app.use(express.json());
