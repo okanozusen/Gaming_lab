@@ -84,6 +84,10 @@ app.use(async (req, res, next) => {
 });
 
 // ✅ Route Handlers
+app.use("/api/auth", authRoutes);
+app.use("/api/protected", protectedRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/messages", messagesRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/posts", postsRoutes);
