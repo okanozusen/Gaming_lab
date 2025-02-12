@@ -12,13 +12,16 @@ const messagesRoutes = require("./routes/messagesRoutes"); // ✅ Ensure message
 const knex = require("knex")(require("./knexfile.js").development);
 const { Pool } = require("pg");
 
-console.log("🔍 Database Credentials:", {
+console.log("🔍 Checking Database Connection Configuration:");
+console.log({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD ? "✅ Password Loaded" : "⚠️ No Password Found!",
-    port: process.env.DB_PORT
+    port: process.env.DB_PORT,
+    ssl: process.env.DB_SSL
 });
+
 
 const pool = new Pool({
     user: process.env.DB_USER,
@@ -26,8 +29,18 @@ const pool = new Pool({
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
-    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false, // ✅ Ensure SSL works
+    ssl: { rejectUnauthorized: false } // 🚀 FORCES SSL CONNECTION
 });
+
+pool.connect((err, client, release) => {
+    if (err) {
+        console.error("🚨 GLOBAL Database Connection Error:", err.message);
+    } else {
+        console.log("✅ GLOBAL PostgreSQL Database Connection Established!");
+        release();
+    }
+});
+
 
 
 

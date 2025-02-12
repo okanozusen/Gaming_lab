@@ -9,7 +9,7 @@ module.exports = {
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
       port: process.env.DB_PORT,
-      ssl: { rejectUnauthorized: false }, // ✅ Required for Render
+      ssl: { require: true, rejectUnauthorized: false }, // 🔥 REQUIRED FIX
     },
     migrations: {
       directory: "./migrations",

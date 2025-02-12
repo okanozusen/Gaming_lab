@@ -12,11 +12,24 @@ let IGDB_ACCESS_TOKEN = "";
 // ✅ Ensure you use the same DB credentials from `server.js`
 const pool = new Pool({
     user: process.env.DB_USER,
-    host: process.env.DB_HOST || "localhost",
-    database: process.env.DB_NAME || "gaming_lab",
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
+    ssl: { rejectUnauthorized: false } // ✅ OVERRIDES SSL ISSUES
 });
+
+
+pool.connect((err, client, release) => {
+    if (err) {
+        console.error("🚨 Database Connection Error:", err.message);
+    } else {
+        console.log("✅ Successfully connected to PostgreSQL Database!");
+        release();
+    }
+});
+
+
 
 // ✅ Fetch new Twitch token for IGDB API
 async function getTwitchToken() {
@@ -79,15 +92,22 @@ async function fetchGameDetails(gameId) {
 // ✅ Fetch all posts with game details
 router.get("/", async (req, res) => {
     try {
+        console.log("🔍 Fetching posts from the database...");
+        
         const posts = await pool.query(
             "SELECT posts.*, games.name AS game_name FROM posts LEFT JOIN games ON posts.game_id = games.id"
         );
+
+        console.log("✅ Retrieved Posts:", posts.rows); // Log data
+
         res.json(posts.rows);
     } catch (error) {
-        console.error("🚨 Error fetching posts:", error.message);
-        res.status(500).json({ error: "Failed to fetch posts" });
+        console.error("🚨 Database Query Failed:", error.message);
+console.error("🔍 Error Details:", error);
+
     }
 });
+
 
 // ✅ Create a new post (fetch game details if missing)
 router.post("/", async (req, res) => {
