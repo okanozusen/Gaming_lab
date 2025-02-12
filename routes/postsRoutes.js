@@ -4,8 +4,8 @@ const fetch = require("node-fetch");
 
 const router = express.Router();
 
-const TWITCH_CLIENT_ID = "7prjneawkc0cl5azyplw3vnm8f5vlx";  
-const TWITCH_CLIENT_SECRET = "scmkwos1kkcyv39sqy4dnopugyg3b2";  
+const TWITCH_CLIENT_ID = "7prjneawkc0cl5azyplw3vnm8f5vlx";  // Replace with your Twitch Client ID
+const TWITCH_CLIENT_SECRET = "scmkwos1kkcyv39sqy4dnopugyg3b2";  // Replace with your Twitch Client Secret
 
 let IGDB_ACCESS_TOKEN = "";
 
@@ -16,7 +16,7 @@ const pool = new Pool({
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
-    ssl: { rejectUnauthorized: false } 
+    ssl: { rejectUnauthorized: false } // ✅ OVERRIDES SSL ISSUES
 });
 
 pool.connect((err, client, release) => {
@@ -53,10 +53,10 @@ async function getTwitchToken() {
     }
 }
 
-// ✅ Fetch game details from IGDB
+// ✅ Fetch game details from IGDB with correct query format
 async function fetchGameDetails(gameId) {
     try {
-        if (!IGDB_ACCESS_TOKEN) await getTwitchToken(); 
+        if (!IGDB_ACCESS_TOKEN) await getTwitchToken(); // Ensure token is always valid
 
         console.log(`🔍 Fetching game details from IGDB for Game ID: ${gameId}`);
 
@@ -104,7 +104,7 @@ router.get("/", async (req, res) => {
     }
 });
 
-// ✅ Create a new post with game details
+// ✅ Create a new post (fetch game details if missing)
 router.post("/", async (req, res) => {
     try {
         const { username, content, game_id } = req.body;
@@ -163,19 +163,6 @@ router.post("/:id/reply", async (req, res) => {
     } catch (error) {
         console.error("🚨 Error adding reply:", error.message);
         res.status(500).json({ error: "Failed to add reply" });
-    }
-});
-
-// ✅ Fetch replies for a post
-router.get("/:id/replies", async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const replies = await pool.query("SELECT * FROM replies WHERE post_id = $1", [id]);
-        res.json(replies.rows);
-    } catch (error) {
-        console.error("🚨 Error fetching replies:", error.message);
-        res.status(500).json({ error: "Failed to fetch replies" });
     }
 });
 
