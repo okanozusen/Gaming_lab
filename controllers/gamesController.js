@@ -96,10 +96,10 @@ async function searchGames(req, res) {
 // ✅ Fetch Game Details
 async function getGameDetails(req, res) {
     try {
-        const gameId = req.params.id;
+        const gameId = req.params.id;  // Get the game ID from the URL parameter
         const query = `
             fields id, name, cover.url, genres.name, themes.name, platforms.name, rating, summary, game_modes.name, age_ratings.category, first_release_date;
-            where id = ${gameId};
+            where id = ${gameId};  // Use the actual game ID here
             limit 1;
         `;
 
@@ -115,6 +115,7 @@ async function getGameDetails(req, res) {
         res.status(500).json({ error: "Failed to fetch game details" });
     }
 }
+
 
 // ✅ Export all controller functions
 module.exports = { searchGames, getGameDetails };
