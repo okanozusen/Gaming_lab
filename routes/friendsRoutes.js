@@ -5,28 +5,31 @@ const router = express.Router();
 // ✅ Get Friend List
 router.get("/list", async (req, res) => {
     try {
-        const { username } = req.query; // Ensure request includes a username
+        const { username } = req.query;
         if (!username) return res.status(400).json({ error: "Username is required" });
 
         console.log("🔍 Fetching friends for:", username);
 
+        // Get the user's ID
+        const user = await knex("users").where("username", username).first();
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        // Get all friend relationships
         const friends = await knex("friends")
-            .where("user1", username)
-            .orWhere("user2", username)
-            .select("user1", "user2");
+            .where("user_id", user.id)
+            .orWhere("friend_id", user.id);
 
-        // Extract the usernames that are friends with the current user
-        const friendUsernames = friends.map(f =>
-            f.user1 === username ? f.user2 : f.user1
-        );
-
-        if (friendUsernames.length === 0) {
+        if (!friends.length) {
             return res.status(404).json({ error: "No friends found" });
         }
 
+        // Extract friend IDs
+        const friendIds = friends.map((f) => (f.user_id === user.id ? f.friend_id : f.user_id));
+
+        // Fetch friend details
         const friendProfiles = await knex("users")
-            .whereIn("username", friendUsernames)
-            .select("username", "profile_pic");
+            .whereIn("id", friendIds)
+            .select("id", "username", "profile_pic");
 
         res.json(friendProfiles);
     } catch (error) {
@@ -55,21 +58,26 @@ router.post("/add-friend", async (req, res) => {
     }
 
     try {
+        // Get user IDs based on usernames
+        const user = await knex("users").where("username", currentUser).first();
+        const friend = await knex("users").where("username", friendUsername).first();
+
+        if (!user || !friend) {
+            return res.status(404).json({ error: "One or both users not found" });
+        }
+
+        // Check if friendship already exists
         const existingFriendship = await knex("friends")
-            .where(function () {
-                this.where("user1", currentUser).andWhere("user2", friendUsername);
-            })
-            .orWhere(function () {
-                this.where("user1", friendUsername).andWhere("user2", currentUser);
-            })
+            .where({ user_id: user.id, friend_id: friend.id })
+            .orWhere({ user_id: friend.id, friend_id: user.id })
             .first();
 
-        if (!existingFriendship) {
-            await knex("friends").insert([
-                { user1: currentUser, user2: friendUsername },
-                { user1: friendUsername, user2: currentUser }, // Mutual friendship
-            ]);
+        if (existingFriendship) {
+            return res.status(400).json({ error: "Friendship already exists" });
         }
+
+        // Insert mutual friendship
+        await knex("friends").insert({ user_id: user.id, friend_id: friend.id });
 
         res.json({ success: true, message: "Friend added successfully" });
     } catch (error) {
