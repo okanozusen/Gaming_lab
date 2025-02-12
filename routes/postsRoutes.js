@@ -7,7 +7,8 @@ const router = express.Router();
 const TWITCH_CLIENT_ID = "7prjneawkc0cl5azyplw3vnm8f5vlx";  // Replace with your Twitch Client ID
 const TWITCH_CLIENT_SECRET = "scmkwos1kkcyv39sqy4dnopugyg3b2";  // Replace with your Twitch Client Secret
 
-let IGDB_ACCESS_TOKEN = "";
+let IGDB_ACCESS_TOKEN = process.env.TWITCH_ACCESS_TOKEN || ""; // ✅ Start with environment variable
+let TOKEN_EXPIRATION_TIME = 0; // ✅ Store token expiration timestamp
 
 // ✅ Ensure you use the same DB credentials from `server.js`
 const pool = new Pool({
@@ -30,9 +31,16 @@ pool.connect((err, client, release) => {
 
 // ✅ Fetch new Twitch token for IGDB API
 async function getTwitchToken() {
+    const currentTime = Math.floor(Date.now() / 1000); // ✅ Get current time in seconds
+
+    if (IGDB_ACCESS_TOKEN && currentTime < TOKEN_EXPIRATION_TIME) {
+        console.log("✅ Using cached Twitch token");
+        return IGDB_ACCESS_TOKEN;
+    }
+
+    console.log("🔑 Fetching new Twitch Access Token...");
+
     try {
-        console.log("🔑 Fetching new Twitch Access Token...");
-        
         const response = await fetch("https://id.twitch.tv/oauth2/token", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -44,23 +52,25 @@ async function getTwitchToken() {
         });
 
         const data = await response.json();
-
         if (data.access_token) {
             IGDB_ACCESS_TOKEN = data.access_token;
+            TOKEN_EXPIRATION_TIME = currentTime + data.expires_in; // ✅ Save expiration time
+
             console.log("✅ New IGDB Access Token Set:", IGDB_ACCESS_TOKEN);
+            return IGDB_ACCESS_TOKEN;
         } else {
             throw new Error("⚠️ Failed to retrieve Twitch token");
         }
     } catch (error) {
         console.error("🚨 Twitch Token Fetch Error:", error.message);
+        return null;
     }
 }
-
 // ✅ Fetch game details from IGDB with correct query format
 // ✅ Fetch game details from IGDB API properly
 async function fetchGameDetails(gameId) {
     try {
-        if (!IGDB_ACCESS_TOKEN) await getTwitchToken(); // Ensure valid token
+        const token = await getTwitchToken(); // ✅ Always get a valid token
 
         console.log(`🔍 Fetching game details from IGDB for Game ID: ${gameId}`);
 
@@ -68,37 +78,40 @@ async function fetchGameDetails(gameId) {
             method: "POST",
             headers: {
                 "Client-ID": TWITCH_CLIENT_ID,
-                "Authorization": `Bearer ${IGDB_ACCESS_TOKEN}`,
+                "Authorization": `Bearer ${token}`,
                 "Content-Type": "text/plain",
             },
             body: `fields id, name; where id = ${parseInt(gameId, 10)};`,
         });
 
         const data = await response.json();
-        
         if (!Array.isArray(data) || data.length === 0) {
             console.log(`⚠️ IGDB API returned no results for Game ID: ${gameId}`);
             return { id: gameId, name: "Unknown Game" };
         }
 
         console.log(`✅ Found Game: ${data[0].name}`);
-        return { id: data[0].id, name: data[0].name }; // ✅ Ensure name is returned
+        return { id: data[0].id, name: data[0].name };
     } catch (error) {
         console.error("🚨 Error fetching game from IGDB API:", error.message);
         return { id: gameId, name: "Unknown Game" };
     }
 }
 
+
 // ✅ Fetch all posts with game details and replies
+// ✅ Fetch all posts with correct game details
 router.get("/", async (req, res) => {
     try {
         console.log("🔍 Fetching posts from the database...");
-        
+
+        // ✅ Ensure game_name is included in query
         const posts = await pool.query(
-            `SELECT posts.*, games.name AS game_name FROM posts 
-             LEFT JOIN games ON posts.game_id = games.id`
+            `SELECT posts.*, COALESCE(games.name, 'Unknown Game') AS game_name
+             FROM posts LEFT JOIN games ON posts.game_id = games.id`
         );
 
+        // ✅ Fetch replies for each post
         for (let post of posts.rows) {
             const replies = await pool.query("SELECT * FROM replies WHERE post_id = $1", [post.id]);
             post.replies = replies.rows;
@@ -111,6 +124,8 @@ router.get("/", async (req, res) => {
     }
 });
 
+
+// ✅ Create a new post (fetch game details if missing)
 // ✅ Create a new post (fetch game details if missing)
 router.post("/", async (req, res) => {
     try {
@@ -120,7 +135,7 @@ router.post("/", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        // ✅ Ensure user exists
+        // ✅ Ensure the user exists
         const userResult = await pool.query("SELECT id, profile_pic FROM users WHERE username = $1", [username]);
         if (userResult.rowCount === 0) {
             return res.status(404).json({ error: "User not found" });
@@ -131,20 +146,24 @@ router.post("/", async (req, res) => {
 
         let game_name = "Unknown Game";
 
-        // ✅ Check if game exists in DB
+        // ✅ Check if the game exists in the database
         const gameQuery = await pool.query("SELECT name FROM games WHERE id = $1", [game_id]);
+
         if (gameQuery.rowCount > 0) {
             game_name = gameQuery.rows[0].name;
         } else {
-            // ✅ Fetch from IGDB if not found in DB
+            console.log(`🔍 Game ID ${game_id} not found in database, fetching from IGDB...`);
+
+            // ✅ Fetch game details from IGDB API
             const gameDetails = await fetchGameDetails(game_id);
             game_name = gameDetails.name;
 
-            // ✅ Save new game in DB for future use
-            await pool.query("INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", [game_id, game_name]);
+            // ✅ Save the game in DB if it's new
+            await pool.query("INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", 
+                [game_id, game_name]);
         }
 
-        // ✅ Save post with correct game_name
+        // ✅ Insert post with the correct game name
         const result = await pool.query(
             "INSERT INTO posts (user_id, username, content, game_id, game_name, profile_pic) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
             [user_id, username, content, game_id, game_name, profile_pic]
@@ -157,6 +176,7 @@ router.post("/", async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
+
 
 // ✅ Add a reply to a post
 router.post("/:id/reply", async (req, res) => {
