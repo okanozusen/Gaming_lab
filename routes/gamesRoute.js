@@ -1,20 +1,15 @@
 const express = require("express");
 const { searchGames, getGameDetails } = require("../controllers/gamesController");
-
 const router = express.Router();
 
-// Log to ensure the router is loaded
-console.log("✅ Game Routes Loaded");
+// Fix the route from /search to /games
+router.get("/", async (req, res) => {  // This should match '/api/games'
+    const { search, genres, themes, platforms, esrb, mode, page } = req.query;
 
-// Search endpoint
-router.get("/search", async (req, res) => {
-    const { search, page } = req.query;
-
-    // Log incoming request parameters for debugging
-    console.log(`🔍 Searching for games. Search Term: ${search}, Page: ${page}`);
-
+    // Log to debug the incoming request
+    console.log(`🔍 Searching for games with params: ${req.query}`);
+    
     try {
-        // Call the search function from the controller
         await searchGames(req, res);
     } catch (error) {
         console.error("🚨 Error in searchGames route:", error.message);
@@ -22,15 +17,12 @@ router.get("/search", async (req, res) => {
     }
 });
 
-// Game details endpoint
+// Existing game details route
 router.get("/:id", async (req, res) => {
     const { id } = req.params;
-
-    // Log game details request
-    console.log(`🔍 Fetching details for Game ID: ${id}`);
-
+    console.log(`🔍 Fetching game details for ID: ${id}`);
+    
     try {
-        // Call the function to fetch game details
         await getGameDetails(req, res);
     } catch (error) {
         console.error("🚨 Error in getGameDetails route:", error.message);
