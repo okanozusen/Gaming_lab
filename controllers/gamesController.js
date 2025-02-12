@@ -105,7 +105,7 @@ async function getGameDetails(gameId) {
 
         const response = await axios.post(
             "https://api.igdb.com/v4/games",
-            `fields id, name, status, summary, cover.url; where id = ${gameId};`,
+            `fields id, name, summary, cover.url, first_release_date, platforms.name, age_ratings.category; where id = ${gameId};`,
             {
                 headers: {
                     "Client-ID": process.env.TWITCH_CLIENT_ID,
