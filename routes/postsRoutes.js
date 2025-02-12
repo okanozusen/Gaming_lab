@@ -4,20 +4,20 @@ const fetch = require("node-fetch");
 
 const router = express.Router();
 
-const TWITCH_CLIENT_ID = "7prjneawkc0cl5azyplw3vnm8f5vlx";  // Replace with your Twitch Client ID
-const TWITCH_CLIENT_SECRET = "scmkwos1kkcyv39sqy4dnopugyg3b2";  // Replace with your Twitch Client Secret
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID;
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 
-let IGDB_ACCESS_TOKEN = process.env.TWITCH_ACCESS_TOKEN || ""; // ✅ Start with environment variable
-let TOKEN_EXPIRATION_TIME = 0; // ✅ Store token expiration timestamp
+let IGDB_ACCESS_TOKEN = process.env.TWITCH_ACCESS_TOKEN || "";
+let TOKEN_EXPIRATION_TIME = 0;
 
-// ✅ Ensure you use the same DB credentials from `server.js`
+// ✅ Ensure DB connection
 const pool = new Pool({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
-    ssl: { rejectUnauthorized: false } // ✅ OVERRIDES SSL ISSUES
+    ssl: { rejectUnauthorized: false }
 });
 
 pool.connect((err, client, release) => {
@@ -29,9 +29,9 @@ pool.connect((err, client, release) => {
     }
 });
 
-// ✅ Fetch new Twitch token for IGDB API
+// ✅ Fetch new Twitch token
 async function getTwitchToken() {
-    const currentTime = Math.floor(Date.now() / 1000); // ✅ Get current time in seconds
+    const currentTime = Math.floor(Date.now() / 1000);
 
     if (IGDB_ACCESS_TOKEN && currentTime < TOKEN_EXPIRATION_TIME) {
         console.log("✅ Using cached Twitch token");
@@ -54,9 +54,8 @@ async function getTwitchToken() {
         const data = await response.json();
         if (data.access_token) {
             IGDB_ACCESS_TOKEN = data.access_token;
-            TOKEN_EXPIRATION_TIME = currentTime + data.expires_in; // ✅ Save expiration time
-
-            console.log("✅ New IGDB Access Token Set:", IGDB_ACCESS_TOKEN);
+            TOKEN_EXPIRATION_TIME = currentTime + data.expires_in;
+            console.log("✅ New IGDB Access Token Set");
             return IGDB_ACCESS_TOKEN;
         } else {
             throw new Error("⚠️ Failed to retrieve Twitch token");
@@ -66,37 +65,29 @@ async function getTwitchToken() {
         return null;
     }
 }
-// ✅ Fetch game details from IGDB with correct query format
-// ✅ Fetch game details from IGDB API properly
+
+// ✅ Fetch game details
 async function fetchGameDetails(gameId) {
     try {
-        if (!IGDB_ACCESS_TOKEN) {  // ✅ Ensure a valid token before making the request
-            console.log("⚠️ No IGDB Token Found! Fetching a new one...");
-            await getTwitchToken();
-        }
+        const accessToken = await getTwitchToken();
+        if (!accessToken) return { id: gameId, name: "Unknown Game" };
 
-        console.log(`🔍 Fetching game details for Game ID: ${gameId}`);
+        console.log(`🔍 Fetching game details from IGDB for Game ID: ${gameId}`);
 
         const response = await fetch("https://api.igdb.com/v4/games", {
             method: "POST",
             headers: {
-                "Client-ID": process.env.TWITCH_CLIENT_ID,
-                "Authorization": `Bearer ${IGDB_ACCESS_TOKEN}`,
+                "Client-ID": TWITCH_CLIENT_ID,
+                "Authorization": `Bearer ${accessToken}`,
                 "Content-Type": "text/plain",
             },
-            body: `fields id, name; where id = ${parseInt(gameId, 10)};`
+            body: `fields id, name; where id = ${parseInt(gameId, 10)};`,
         });
 
-        if (response.status === 401) {  // ✅ If token expired, refresh it and retry
-            console.log("🔄 IGDB Token Expired. Refreshing...");
-            await getTwitchToken();
-            return await fetchGameDetails(gameId); // ✅ Retry with new token
-        }
-
         const data = await response.json();
-
+        
         if (!Array.isArray(data) || data.length === 0) {
-            console.log(`⚠️ No results from IGDB for Game ID: ${gameId}`);
+            console.log(`⚠️ IGDB API returned no results for Game ID: ${gameId}`);
             return { id: gameId, name: "Unknown Game" };
         }
 
@@ -108,8 +99,7 @@ async function fetchGameDetails(gameId) {
     }
 }
 
-// ✅ Fetch all posts with game details and replies
-// ✅ Fetch all posts with correct game details
+// ✅ Fetch posts with correct game details
 router.get("/", async (req, res) => {
     try {
         console.log("🔍 Fetching posts from the database...");
@@ -130,79 +120,6 @@ router.get("/", async (req, res) => {
     } catch (error) {
         console.error("🚨 Database Query Failed:", error.message);
         res.status(500).json({ error: "Failed to fetch posts", details: error.message });
-    }
-});
-
-// ✅ Create a new post (fetch game details if missing)
-// ✅ Create a new post (fetch game details if missing)
-router.post("/", async (req, res) => {
-    try {
-        const { username, content, game_id } = req.body;
-
-        if (!username || !content || !game_id) {
-            return res.status(400).json({ error: "Missing required fields" });
-        }
-
-        // ✅ Ensure the user exists
-        const userResult = await pool.query("SELECT id, profile_pic FROM users WHERE username = $1", [username]);
-        if (userResult.rowCount === 0) {
-            return res.status(404).json({ error: "User not found" });
-        }
-
-        const user_id = userResult.rows[0].id;
-        const profile_pic = userResult.rows[0].profile_pic || "https://placehold.co/50";
-
-        let game_name = "Unknown Game";
-
-        // ✅ Check if the game exists in the database
-        const gameQuery = await pool.query("SELECT name FROM games WHERE id = $1", [game_id]);
-
-        if (gameQuery.rowCount > 0) {
-            game_name = gameQuery.rows[0].name;
-        } else {
-            console.log(`🔍 Game ID ${game_id} not found in database, fetching from IGDB...`);
-            const gameDetails = await fetchGameDetails(game_id);
-            game_name = gameDetails.name;
-
-            // ✅ Save the new game in the database
-            await pool.query("INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", [game_id, game_name]);
-        }
-
-        // ✅ Insert the post with the correct game name
-        const result = await pool.query(
-            "INSERT INTO posts (user_id, username, content, game_id, game_name, profile_pic) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-            [user_id, username, content, game_id, game_name, profile_pic]
-        );
-
-        console.log("✅ Post Created:", result.rows[0]); // Debugging log
-        res.json(result.rows[0]); // ✅ Ensure game_name is sent back
-    } catch (error) {
-        console.error("🚨 Error posting:", error.message);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
-
-
-// ✅ Add a reply to a post
-router.post("/:id/reply", async (req, res) => {
-    const { id } = req.params;
-    const { username, content } = req.body;
-
-    if (!username || !content) {
-        return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    try {
-        const postCheck = await pool.query("SELECT id FROM posts WHERE id = $1", [id]);
-        if (postCheck.rowCount === 0) {
-            return res.status(404).json({ error: "Post not found" });
-        }
-
-        const result = await pool.query("INSERT INTO replies (post_id, username, content) VALUES ($1, $2, $3) RETURNING *", [id, username, content]);
-        res.json(result.rows[0]);
-    } catch (error) {
-        console.error("🚨 Error adding reply:", error.message);
-        res.status(500).json({ error: "Failed to add reply" });
     }
 });
 

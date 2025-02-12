@@ -11,6 +11,9 @@ const userRoutes = require("./routes/usersRoutes"); // ✅ Fixed the import (was
 const messagesRoutes = require("./routes/messagesRoutes"); // ✅ Ensure messages API route is included
 const knex = require("knex")(require("./knexfile.js").development);
 const { Pool } = require("pg");
+const fs = require("fs");
+const fetch = require("node-fetch");
+
 
 console.log("🔍 Checking Database Connection Configuration:");
 console.log({
@@ -70,32 +73,68 @@ app.locals.db = knex;
 const PORT = 5000;
 const CLIENT_ID = process.env.TWITCH_CLIENT_ID;
 const CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
-let ACCESS_TOKEN = "";
 
-// ✅ Function to fetch a new Twitch token
+let IGDB_ACCESS_TOKEN = process.env.TWITCH_ACCESS_TOKEN || ""; // ✅ Start with env variable
+let TOKEN_EXPIRATION_TIME = 0; // ✅ Store expiration timestamp
+
+// ✅ Load Token from File (if exists)
+const TOKEN_FILE_PATH = "./twitch_token.json";
+if (fs.existsSync(TOKEN_FILE_PATH)) {
+    const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE_PATH, "utf8"));
+    IGDB_ACCESS_TOKEN = tokenData.access_token;
+    TOKEN_EXPIRATION_TIME = tokenData.expires_at;
+}
 async function getTwitchToken() {
+    const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
+
+    // ✅ Use cached token if it's still valid
+    if (IGDB_ACCESS_TOKEN && currentTime < TOKEN_EXPIRATION_TIME) {
+        console.log("✅ Using cached Twitch token:", IGDB_ACCESS_TOKEN);
+        return IGDB_ACCESS_TOKEN;
+    }
+
+    console.log("🔑 Fetching new Twitch Access Token...");
+
     try {
-        console.log("🔑 Fetching new Twitch token...");
-        const response = await axios.post("https://id.twitch.tv/oauth2/token", null, {
-            params: {
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
+        const response = await fetch("https://id.twitch.tv/oauth2/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                client_id: process.env.TWITCH_CLIENT_ID,
+                client_secret: process.env.TWITCH_CLIENT_SECRET,
                 grant_type: "client_credentials",
-            },
+            }),
         });
-        ACCESS_TOKEN = response.data.access_token;
-        console.log("✅ New Twitch Access Token:", ACCESS_TOKEN);
+
+        const data = await response.json();
+        if (data.access_token) {
+            IGDB_ACCESS_TOKEN = data.access_token;
+            TOKEN_EXPIRATION_TIME = currentTime + data.expires_in;
+
+            console.log("✅ New Twitch Token:", IGDB_ACCESS_TOKEN);
+
+            // ✅ Save Token to File
+            fs.writeFileSync(TOKEN_FILE_PATH, JSON.stringify({
+                access_token: IGDB_ACCESS_TOKEN,
+                expires_at: TOKEN_EXPIRATION_TIME
+            }));
+
+            return IGDB_ACCESS_TOKEN;
+        } else {
+            throw new Error("⚠️ Failed to retrieve Twitch token");
+        }
     } catch (error) {
-        console.error("🚨 Failed to get Twitch token", error.response ? error.response.data : error.message);
+        console.error("🚨 Twitch Token Fetch Error:", error.message);
+        return null;
     }
 }
-
 // ✅ Middleware to refresh token before making API requests
 app.use(async (req, res, next) => {
-    if (!ACCESS_TOKEN) await getTwitchToken();
-    req.ACCESS_TOKEN = ACCESS_TOKEN;
+    if (!IGDB_ACCESS_TOKEN) await getTwitchToken();
+    req.IGDB_ACCESS_TOKEN = IGDB_ACCESS_TOKEN;
     next();
 });
+
 
 
 console.log("🔍 Checking Registered Routes...");
@@ -121,3 +160,6 @@ app.listen(PORT, async () => {
     await getTwitchToken(); // ✅ Fetch token before starting
     console.log(`🚀 Server running on port ${PORT}`);
 });
+
+
+module.exports = { app, getTwitchToken, IGDB_ACCESS_TOKEN };
