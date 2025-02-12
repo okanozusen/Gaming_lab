@@ -19,9 +19,8 @@ router.get("/", async (req, res) => {
 // ✅ Route: Get Game Details by ID
 router.get("/:id", async (req, res) => {
     const { id } = req.params;
-    
-    // ✅ Ensure ID is a valid number
     const gameId = parseInt(id, 10);
+
     if (isNaN(gameId)) {
         return res.status(400).json({ error: "Invalid Game ID" });
     }
@@ -30,7 +29,7 @@ router.get("/:id", async (req, res) => {
 
     try {
         const gameDetails = await getGameDetails(gameId);
-        
+
         if (!gameDetails || gameDetails.error) {
             return res.status(404).json({ error: "Game not found" });
         }
@@ -41,5 +40,6 @@ router.get("/:id", async (req, res) => {
         res.status(500).json({ error: "Failed to fetch game details" });
     }
 });
+
 
 module.exports = router;

@@ -94,32 +94,39 @@ async function searchGames(req, res) {
 }
 
 // ✅ Fetch Game Details (FIXED)
-async function getGameDetails(req, res) {
+async function getGameDetails(gameId) {
     try {
-        const gameId = req.params.id;  
-        console.log(`🔍 Fetching game details for ID: ${gameId}`);  // ✅ LOG game ID
+        console.log(`📡 Fetching game details for ID: ${gameId}`);
 
-        const query = `
-            fields id, name, cover.url, genres.name, themes.name, platforms.name, rating, summary, game_modes.name, age_ratings.category, first_release_date;
-            where id = ${gameId};  
-            limit 1;
-        `;
-
-        console.log("🌎 Sending IGDB Query:\n", query);  // ✅ LOG the Query
-
-        const data = await fetchFromIGDB("games", query);
-
-        console.log("✅ IGDB Response:", data);  // ✅ LOG API Response
-
-        if (!data || data.length === 0) {
-            console.error("🚨 No game found in IGDB response!");
-            return res.status(404).json({ error: "Game not found" });
+        // Ensure gameId is valid
+        if (!gameId || isNaN(gameId)) {
+            throw new Error("Invalid Game ID");
         }
 
-        res.json(data[0]);  // ✅ Return first result
+        const response = await axios.post(
+            "https://api.igdb.com/v4/games",
+            `fields id, name, status, summary, cover.url; where id = ${gameId};`,
+            {
+                headers: {
+                    "Client-ID": process.env.TWITCH_CLIENT_ID,
+                    Authorization: `Bearer ${process.env.TWITCH_ACCESS_TOKEN}`,
+                },
+            }
+        );
+
+        const game = response.data[0];
+
+        if (!game) {
+            console.warn(`⚠️ No game found for ID: ${gameId}`);
+            return { error: "Game not found" };
+        }
+
+        console.log(`✅ Game details fetched: ${game.name}`);
+
+        return game;
     } catch (error) {
-        console.error("🚨 Error in getGameDetails route:", error.message);
-        res.status(500).json({ error: "Failed to fetch game details" });
+        console.error("🚨 Error fetching game details:", error.message);
+        return { error: "Failed to retrieve game details" };
     }
 }
 
