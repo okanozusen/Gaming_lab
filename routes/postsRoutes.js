@@ -193,4 +193,27 @@ router.post("/:id/reply", async (req, res) => {
     }
 });
 
+// Add this route in postsRoutes.js
+router.get("/user/:username", async (req, res) => {
+    try {
+        const { username } = req.params;
+        console.log("🔍 Fetching posts for user:", username);
+
+        const result = await pool.query(
+            "SELECT * FROM posts WHERE username = $1 ORDER BY created_at DESC",
+            [username]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "No posts found for this user" });
+        }
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error("🚨 Error fetching user posts:", error.message);
+        res.status(500).json({ error: "Failed to fetch user posts" });
+    }
+});
+
+
 module.exports = router;
