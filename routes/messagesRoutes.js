@@ -1,34 +1,44 @@
 const express = require("express");
+const knex = require("../db/knex");
 const router = express.Router();
-const { Pool } = require("pg");
 
-// ✅ Connect to PostgreSQL
-const pool = new Pool({
-    user: process.env.DB_USER,
-    host: process.env.DB_HOST || "localhost",
-    database: process.env.DB_NAME || "gaming_lab",
-    password: process.env.DB_PASSWORD,
-    port: process.env.DB_PORT || 5432,
+// ✅ Fetch All Messages for a User (Grouped by Sender)
+router.get("/:username", async (req, res) => {
+    try {
+        const messages = await knex("messages")
+            .where("receiver", req.params.username)
+            .orWhere("sender", req.params.username)
+            .orderBy("timestamp", "desc");
+
+        res.json(messages);
+    } catch (error) {
+        console.error("🚨 Error fetching messages:", error.message);
+        res.status(500).json({ error: "Failed to fetch messages" });
+    }
 });
 
-// ✅ Get Messages for a User
-router.get("/", async (req, res) => {
-    const { username } = req.query;
+// ✅ Send a Message (User Replies)
+router.post("/:receiver/message", async (req, res) => {
+    const { receiver } = req.params;
+    const { sender, message } = req.body;
 
-    if (!username) {
-        return res.status(400).json({ error: "Username is required" });
+    if (!message || !sender) {
+        return res.status(400).json({ error: "Message and sender are required!" });
     }
 
     try {
-        const messages = await pool.query(
-            "SELECT * FROM messages WHERE recipient = $1 ORDER BY created_at DESC",
-            [username]
-        );
+        await knex("messages").insert({
+            sender,
+            receiver,
+            content: message,
+            timestamp: knex.fn.now(),
+        });
 
-        res.json(messages.rows);
+        console.log(`📨 Message sent from ${sender} to ${receiver}: "${message}"`);
+        res.json({ success: true, message: "Message sent successfully!" });
     } catch (error) {
-        console.error("🚨 Error fetching messages:", error.message);
-        res.status(500).json({ error: "Internal Server Error" });
+        console.error("🚨 Error sending message:", error.message);
+        res.status(500).json({ error: "Failed to send message" });
     }
 });
 
