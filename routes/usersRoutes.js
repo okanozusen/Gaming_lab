@@ -5,13 +5,28 @@ const { Pool } = require("pg");
 // ✅ PostgreSQL connection
 const pool = new Pool({
     user: process.env.DB_USER,
-    host: process.env.DB_HOST || "localhost",
-    database: process.env.DB_NAME || "gaming_lab",
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
+    ssl: { rejectUnauthorized: false } // ✅ Forces SSL for Render
 });
+
+// ✅ Fetch all users (Fixes "Cannot GET /api/users")
+router.get("/", async (req, res) => {
+    try {
+        console.log("🔍 Fetching all users from the database...");
+        const users = await pool.query("SELECT id, username, profile_pic, banner, platforms, genres FROM users;");
+        console.log("✅ Users Retrieved:", users.rows);
+        res.json(users.rows);
+    } catch (error) {
+        console.error("🚨 Error fetching users:", error.message);
+        res.status(500).json({ error: "Failed to fetch users" });
+    }
+});
+
 // ✅ Update username (and reflect it in posts)
-router.post("/api/users/update-username", async (req, res) => {
+router.post("/update-username", async (req, res) => {
     const { oldUsername, newUsername } = req.body;
 
     if (!oldUsername || !newUsername) {
@@ -72,13 +87,13 @@ router.get("/:username", async (req, res) => {
     }
 });
 
+// ✅ Test route to confirm users API is working
 router.get("/test", (req, res) => {
     res.json({ message: "✅ Users API is working!" });
 });
 
-
 // ✅ Update profile picture
-router.post("/api/users/update-profile-pic", async (req, res) => {
+router.post("/update-profile-pic", async (req, res) => {
     try {
         const { username, profile_pic } = req.body;
 
@@ -133,6 +148,5 @@ router.post("/update-preferences", async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
-
 
 module.exports = router;
