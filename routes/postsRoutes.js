@@ -19,7 +19,6 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false } // ✅ OVERRIDES SSL ISSUES
 });
 
-
 pool.connect((err, client, release) => {
     if (err) {
         console.error("🚨 Database Connection Error:", err.message);
@@ -28,8 +27,6 @@ pool.connect((err, client, release) => {
         release();
     }
 });
-
-
 
 // ✅ Fetch new Twitch token for IGDB API
 async function getTwitchToken() {
@@ -70,18 +67,14 @@ async function fetchGameDetails(gameId) {
                 "Authorization": `Bearer ${IGDB_ACCESS_TOKEN}`,
                 "Content-Type": "text/plain",
             },
-            body: `fields name; where id = ${gameId};`
+            body: `fields id, name; where id = ${parseInt(gameId, 10)};`
         });
 
         const data = await response.json();
-        console.log("📝 IGDB API Response:", JSON.stringify(data, null, 2));
-
         if (!Array.isArray(data) || data.length === 0) {
-            console.log("⚠️ IGDB API returned no results.");
             return { id: gameId, name: "Unknown Game" };
         }
 
-        console.log(`✅ Found Game: ${data[0].name}`);
         return { id: data[0].id, name: data[0].name };
     } catch (error) {
         console.error("🚨 Error fetching game from IGDB API:", error.message);
@@ -89,25 +82,27 @@ async function fetchGameDetails(gameId) {
     }
 }
 
-// ✅ Fetch all posts with game details
+// ✅ Fetch all posts with game details and replies
 router.get("/", async (req, res) => {
     try {
         console.log("🔍 Fetching posts from the database...");
         
         const posts = await pool.query(
-            "SELECT posts.*, games.name AS game_name FROM posts LEFT JOIN games ON posts.game_id = games.id"
+            `SELECT posts.*, games.name AS game_name FROM posts 
+             LEFT JOIN games ON posts.game_id = games.id`
         );
 
-        console.log("✅ Retrieved Posts:", posts.rows); // Log data
+        for (let post of posts.rows) {
+            const replies = await pool.query("SELECT * FROM replies WHERE post_id = $1", [post.id]);
+            post.replies = replies.rows;
+        }
 
         res.json(posts.rows);
     } catch (error) {
         console.error("🚨 Database Query Failed:", error.message);
-console.error("🔍 Error Details:", error);
-
+        res.status(500).json({ error: "Failed to fetch posts", details: error.message });
     }
 });
-
 
 // ✅ Create a new post (fetch game details if missing)
 router.post("/", async (req, res) => {
@@ -118,7 +113,6 @@ router.post("/", async (req, res) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        // ✅ Ensure the user exists
         const userResult = await pool.query("SELECT id, profile_pic FROM users WHERE username = $1", [username]);
         if (userResult.rowCount === 0) {
             return res.status(404).json({ error: "User not found" });
@@ -128,42 +122,21 @@ router.post("/", async (req, res) => {
         const profile_pic = userResult.rows[0].profile_pic || "https://placehold.co/50";
 
         let game_name = "Unknown Game";
-
-        // ✅ Check if the game exists in the database
         const gameQuery = await pool.query("SELECT name FROM games WHERE id = $1", [game_id]);
-
         if (gameQuery.rowCount > 0) {
             game_name = gameQuery.rows[0].name;
         } else {
-            // ✅ Fetch game details from IGDB API if missing
             const gameDetails = await fetchGameDetails(game_id);
-
-            if (gameDetails) {
-                game_name = gameDetails.name;
-
-                // ✅ Insert into games table to save for future posts
-                await pool.query(
-                    "INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
-                    [game_id, game_name]
-                );
-            }
+            game_name = gameDetails.name;
+            await pool.query("INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", [game_id, game_name]);
         }
 
-        // ✅ Insert the post with the correct game name
         const result = await pool.query(
             "INSERT INTO posts (user_id, username, content, game_id, game_name, profile_pic) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
             [user_id, username, content, game_id, game_name, profile_pic]
         );
 
-        res.json({
-            id: result.rows[0].id,
-            username: result.rows[0].username,
-            content: result.rows[0].content,
-            game_id: result.rows[0].game_id,
-            game_name: result.rows[0].game_name,
-            game_link: `/game/${result.rows[0].game_id}`,
-            profile_pic: result.rows[0].profile_pic,
-        });
+        res.json(result.rows[0]);
     } catch (error) {
         console.error("🚨 Error posting:", error.message);
         res.status(500).json({ error: "Internal Server Error" });
@@ -180,35 +153,16 @@ router.post("/:id/reply", async (req, res) => {
     }
 
     try {
-        // ✅ Ensure the post exists
         const postCheck = await pool.query("SELECT id FROM posts WHERE id = $1", [id]);
         if (postCheck.rowCount === 0) {
             return res.status(404).json({ error: "Post not found" });
         }
 
-        // ✅ Insert reply
-        const result = await pool.query(
-            "INSERT INTO replies (post_id, username, content) VALUES ($1, $2, $3) RETURNING *",
-            [id, username, content]
-        );
-
+        const result = await pool.query("INSERT INTO replies (post_id, username, content) VALUES ($1, $2, $3) RETURNING *", [id, username, content]);
         res.json(result.rows[0]);
     } catch (error) {
         console.error("🚨 Error adding reply:", error.message);
         res.status(500).json({ error: "Failed to add reply" });
-    }
-});
-
-// ✅ Fetch replies for a post
-router.get("/:id/replies", async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const replies = await pool.query("SELECT * FROM replies WHERE post_id = $1", [id]);
-        res.json(replies.rows);
-    } catch (error) {
-        console.error("🚨 Error fetching replies:", error.message);
-        res.status(500).json({ error: "Failed to fetch replies" });
     }
 });
 
