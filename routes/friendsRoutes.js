@@ -42,6 +42,7 @@ router.get("/list", async (req, res) => {
 });
 
 
+
 // ✅ Get Friend Profile
 router.get("/:username", async (req, res) => {
     try {
@@ -91,29 +92,22 @@ router.post("/add-friend", async (req, res) => {
 });
 
 // ✅ Send a Message to a Friend
-router.post("/:username/message", async (req, res) => {
+router.get("/:username/messages", async (req, res) => {
     const { username } = req.params;
-    const { sender, message } = req.body;
-
-    if (!message || !sender) {
-        return res.status(400).json({ error: "Message and sender are required!" });
-    }
 
     try {
-        await knex("messages").insert({
-            sender,
-            receiver: username,
-            content: message,
-            timestamp: knex.fn.now(),
-        });
+        const messages = await knex("messages")
+            .where("receiver", username)
+            .orWhere("sender", username)
+            .orderBy("timestamp", "desc");
 
-        console.log(`📨 Message sent from ${sender} to ${username}: "${message}"`);
-        res.json({ success: true });
+        res.json(messages);
     } catch (error) {
-        console.error("🚨 Error sending message:", error.message);
-        res.status(500).json({ error: "Failed to send message" });
+        console.error("🚨 Error fetching messages:", error.message);
+        res.status(500).json({ error: "Failed to fetch messages" });
     }
 });
+
 
 // ✅ Get Messages with a Friend
 router.get("/:username/messages", async (req, res) => {
