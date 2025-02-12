@@ -10,26 +10,29 @@ router.get("/list", async (req, res) => {
 
         console.log("🔍 Fetching friends for:", username);
 
-        // Get the user's ID
-        const user = await knex("users").where("username", username).first();
+        // Fetch the user's ID
+        const user = await knex("users").where("username", username).select("id").first();
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        // Get all friend relationships
-        const friends = await knex("friends")
+        // Fetch friends based on user_id OR friend_id
+        const friendsList = await knex("friends")
             .where("user_id", user.id)
-            .orWhere("friend_id", user.id);
+            .orWhere("friend_id", user.id)
+            .select("user_id", "friend_id");
 
-        if (!friends.length) {
-            return res.status(404).json({ error: "No friends found" });
+        if (friendsList.length === 0) {
+            return res.json([]); // No friends found
         }
 
-        // Extract friend IDs
-        const friendIds = friends.map((f) => (f.user_id === user.id ? f.friend_id : f.user_id));
+        // Extract friend IDs (excluding the logged-in user)
+        const friendIDs = friendsList.map(f => 
+            f.user_id === user.id ? f.friend_id : f.user_id
+        );
 
-        // Fetch friend details
+        // Fetch usernames and profile pics of friends
         const friendProfiles = await knex("users")
-            .whereIn("id", friendIds)
-            .select("id", "username", "profile_pic");
+            .whereIn("id", friendIDs)
+            .select("username", "profile_pic");
 
         res.json(friendProfiles);
     } catch (error) {
@@ -37,6 +40,7 @@ router.get("/list", async (req, res) => {
         res.status(500).json({ error: "Failed to fetch friends" });
     }
 });
+
 
 // ✅ Get Friend Profile
 router.get("/:username", async (req, res) => {
