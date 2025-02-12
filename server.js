@@ -81,6 +81,14 @@ app.use(async (req, res, next) => {
     next();
 });
 
+
+console.log("🔍 Checking Registered Routes...");
+app._router.stack.forEach((middleware) => {
+    if (middleware.route) { 
+        console.log(`✅ Route: ${middleware.route.path}`);
+    }
+});
+
 // ✅ Start the Server
 app.listen(PORT, async () => {
     await getTwitchToken(); // ✅ Fetch token before starting
