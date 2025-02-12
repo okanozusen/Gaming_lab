@@ -10,4 +10,9 @@ router.post("/logout", (req, res) => {
     res.json({ message: "Logged out successfully" });
 });
 
+router.use((req, res) => {
+    res.status(404).json({ error: "Invalid authentication route" });
+});
+
+
 module.exports = router;

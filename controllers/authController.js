@@ -8,74 +8,79 @@ const pool = new Pool({
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD, 
     port: process.env.DB_PORT,
-    ssl: {
-        rejectUnauthorized: false  // Ensures the connection is secure
-    }
+    ssl: { rejectUnauthorized: false } // Required for Render PostgreSQL
 });
 
+// ✅ Check Database Connection
+pool.connect()
+    .then(() => console.log("✅ Database Connected Successfully"))
+    .catch((err) => console.error("🚨 Database Connection Error:", err));
 
 
-// **Register New User**
+// **🔹 Register New User**
 exports.register = async (req, res) => {
     try {
         const { email, username, password } = req.body;
         console.log("🔍 Registration Attempt:", email, username);
 
         if (!email || !username || !password) {
-            console.error("Missing fields:", req.body);
+            console.error("❌ Missing fields:", req.body);
             return res.status(400).json({ error: "All fields are required." });
         }
 
-        // Password security check
+        // Password Strength Check
         const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
         if (!passwordRegex.test(password)) {
-            console.error("Password does not meet the criteria:", password);
-            return res.status(400).json({ error: "Password must be at least 8 characters long, contain 1 uppercase letter, and 1 special character." });
+            console.error("❌ Password does not meet criteria.");
+            return res.status(400).json({
+                error: "Password must be at least 8 characters long, contain 1 uppercase letter, and 1 special character."
+            });
         }
 
-        // Convert email to lowercase for consistency
+        // Convert email to lowercase
         const lowerEmail = email.toLowerCase();
 
-        // Check if email or username already exists in the database
+        // Check if user exists
         const userExists = await pool.query(
             "SELECT id FROM users WHERE email = $1 OR username = $2",
             [lowerEmail, username]
         );
-        
+
         if (userExists.rowCount > 0) {
-            console.error("Email or username already registered:", { lowerEmail, username });
+            console.error("❌ Email or username already exists:", { lowerEmail, username });
             return res.status(400).json({ error: "Email or username already registered." });
         }
 
-        // Hash password
+        // Hash Password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Insert new user into the database
+        // Insert into Database
         const result = await pool.query(
             "INSERT INTO users (email, username, password) VALUES ($1, $2, $3) RETURNING id, username, email",
             [lowerEmail, username, hashedPassword]
         );
 
-        console.log("New user created:", result.rows[0]);
+        console.log("✅ User Registered Successfully:", result.rows[0]);
         res.json({ message: "Registration successful", user: result.rows[0] });
+
     } catch (error) {
         console.error("🚨 Registration Error:", error);
         res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 };
 
-// **Login User**
+// **🔹 Login User**
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
         console.log("🔍 Login Attempt - Email:", email);
 
         if (!email || !password) {
-            console.error("Missing fields:", req.body);
+            console.error("❌ Missing login fields:", req.body);
             return res.status(400).json({ error: "Email and password are required." });
         }
 
-        // Convert email to lowercase for consistency
+        // Convert email to lowercase
         const lowerEmail = email.toLowerCase();
 
         // Fetch user by email
@@ -85,30 +90,35 @@ exports.login = async (req, res) => {
         );
 
         if (userResult.rowCount === 0) {
-            console.error("❌ No user found with this email:", lowerEmail);
+            console.error("❌ No user found:", lowerEmail);
             return res.status(401).json({ error: "Invalid email or password" });
         }
 
         const user = userResult.rows[0];
-        console.log("✅ User Found:", user);
+        console.log("✅ User Found:", user.username);
 
-        // Compare password
+        // Validate Password
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
-            console.error("❌ Password does not match!");
+            console.error("❌ Incorrect password for:", user.username);
             return res.status(401).json({ error: "Invalid email or password" });
         }
 
-        // Generate JWT token
+        // **Ensure JWT Secret is Available**
+        if (!process.env.JWT_SECRET) {
+            console.error("🚨 JWT Secret is missing in environment variables!");
+            return res.status(500).json({ error: "Server misconfiguration." });
+        }
+
+        // Generate JWT Token
         const token = jwt.sign(
             { id: user.id, username: user.username },
             process.env.JWT_SECRET,
             { expiresIn: "1h" }
         );
 
-        console.log("✅ Login Successful! Token Generated.");
+        console.log("✅ Login Successful! Token Created.");
 
-        // Return user data and token
         res.json({
             message: "Login successful",
             token,
@@ -120,13 +130,14 @@ exports.login = async (req, res) => {
                 banner: user.banner || "https://picsum.photos/800/250",
             }
         });
+
     } catch (error) {
         console.error("🚨 Login Error:", error);
         res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 };
 
-// **Middleware to Protect Routes**
+// **🔹 Middleware: Authenticate User**
 exports.authenticateUser = (req, res, next) => {
     const token = req.headers.authorization?.split(" ")[1];
 
@@ -144,13 +155,16 @@ exports.authenticateUser = (req, res, next) => {
     }
 };
 
-// **Fetch User Profile**
+// **🔹 Fetch User Profile**
 exports.getUserProfile = async (req, res) => {
     try {
         const { username } = req.params;
         console.log("🔍 Fetching Profile for:", username);
 
-        const result = await pool.query("SELECT username, email, profile_pic, banner FROM users WHERE username = $1", [username]);
+        const result = await pool.query(
+            "SELECT username, email, profile_pic, banner FROM users WHERE username = $1",
+            [username]
+        );
 
         if (result.rowCount === 0) {
             console.error("❌ User not found:", username);
