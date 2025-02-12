@@ -50,7 +50,8 @@ async function searchGames(req, res) {
 
         // ✅ Type Search (Fix for Resident Evil)
         if (search) {
-            whereClauses.push(`name ~ *"${search}"*`);
+            whereClauses.push(`name ~ "${search}"`);
+
         }
 
         // ✅ Genre Filter
