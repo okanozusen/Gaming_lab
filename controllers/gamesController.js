@@ -96,43 +96,33 @@ async function searchGames(req, res) {
 // ✅ Fetch Game Details (FIXED)
 async function getGameDetails(req, res) {
     try {
-        const gameId = req.params.id;
-        console.log(`🎮 Fetching details for game ID: ${gameId}`);
+        const gameId = req.params.id;  
+        console.log(`🔍 Fetching game details for ID: ${gameId}`);  // ✅ LOG game ID
 
-        // ✅ Corrected IGDB Query Syntax
         const query = `
             fields id, name, cover.url, genres.name, themes.name, platforms.name, rating, summary, game_modes.name, age_ratings.category, first_release_date;
-            where id = ${gameId};
+            where id = ${gameId};  
             limit 1;
         `;
 
+        console.log("🌎 Sending IGDB Query:\n", query);  // ✅ LOG the Query
+
         const data = await fetchFromIGDB("games", query);
 
-        if (!Array.isArray(data) || data.length === 0) {
-            console.error(`🚨 No game found with ID: ${gameId}`);
+        console.log("✅ IGDB Response:", data);  // ✅ LOG API Response
+
+        if (!data || data.length === 0) {
+            console.error("🚨 No game found in IGDB response!");
             return res.status(404).json({ error: "Game not found" });
         }
 
-        const game = data[0];
-
-        // ✅ Properly handle nested data to avoid [Object] issue
-        const formattedGame = {
-            ...game,
-            genres: game.genres ? game.genres.map((g) => g.name) : [],
-            themes: game.themes ? game.themes.map((t) => t.name) : [],
-            platforms: game.platforms ? game.platforms.map((p) => p.name) : [],
-            releaseDate: game.first_release_date
-                ? new Date(game.first_release_date * 1000).toISOString().split("T")[0]
-                : "Unknown",
-        };
-
-        console.log("✅ Game Data Retrieved:", formattedGame);
-        res.json(formattedGame);
+        res.json(data[0]);  // ✅ Return first result
     } catch (error) {
         console.error("🚨 Error in getGameDetails route:", error.message);
         res.status(500).json({ error: "Failed to fetch game details" });
     }
 }
+
 
 // ✅ Export all controller functions
 module.exports = { searchGames, getGameDetails };
