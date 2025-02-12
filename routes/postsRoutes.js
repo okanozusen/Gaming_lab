@@ -70,23 +70,33 @@ async function getTwitchToken() {
 // ✅ Fetch game details from IGDB API properly
 async function fetchGameDetails(gameId) {
     try {
-        const token = await getTwitchToken(); // ✅ Always get a valid token
+        if (!IGDB_ACCESS_TOKEN) {  // ✅ Ensure a valid token before making the request
+            console.log("⚠️ No IGDB Token Found! Fetching a new one...");
+            await getTwitchToken();
+        }
 
-        console.log(`🔍 Fetching game details from IGDB for Game ID: ${gameId}`);
+        console.log(`🔍 Fetching game details for Game ID: ${gameId}`);
 
         const response = await fetch("https://api.igdb.com/v4/games", {
             method: "POST",
             headers: {
-                "Client-ID": TWITCH_CLIENT_ID,
-                "Authorization": `Bearer ${token}`,
+                "Client-ID": process.env.TWITCH_CLIENT_ID,
+                "Authorization": `Bearer ${IGDB_ACCESS_TOKEN}`,
                 "Content-Type": "text/plain",
             },
-            body: `fields id, name; where id = ${parseInt(gameId, 10)};`,
+            body: `fields id, name; where id = ${parseInt(gameId, 10)};`
         });
 
+        if (response.status === 401) {  // ✅ If token expired, refresh it and retry
+            console.log("🔄 IGDB Token Expired. Refreshing...");
+            await getTwitchToken();
+            return await fetchGameDetails(gameId); // ✅ Retry with new token
+        }
+
         const data = await response.json();
+
         if (!Array.isArray(data) || data.length === 0) {
-            console.log(`⚠️ IGDB API returned no results for Game ID: ${gameId}`);
+            console.log(`⚠️ No results from IGDB for Game ID: ${gameId}`);
             return { id: gameId, name: "Unknown Game" };
         }
 
@@ -98,32 +108,30 @@ async function fetchGameDetails(gameId) {
     }
 }
 
-
 // ✅ Fetch all posts with game details and replies
 // ✅ Fetch all posts with correct game details
 router.get("/", async (req, res) => {
     try {
         console.log("🔍 Fetching posts from the database...");
 
-        // ✅ Ensure game_name is included in query
         const posts = await pool.query(
-            `SELECT posts.*, COALESCE(games.name, 'Unknown Game') AS game_name
-             FROM posts LEFT JOIN games ON posts.game_id = games.id`
+            `SELECT posts.*, COALESCE(games.name, 'Unknown Game') AS game_name 
+             FROM posts 
+             LEFT JOIN games ON posts.game_id = games.id`
         );
 
-        // ✅ Fetch replies for each post
         for (let post of posts.rows) {
             const replies = await pool.query("SELECT * FROM replies WHERE post_id = $1", [post.id]);
             post.replies = replies.rows;
         }
 
+        console.log("✅ Posts Fetched:", posts.rows);
         res.json(posts.rows);
     } catch (error) {
         console.error("🚨 Database Query Failed:", error.message);
         res.status(500).json({ error: "Failed to fetch posts", details: error.message });
     }
 });
-
 
 // ✅ Create a new post (fetch game details if missing)
 // ✅ Create a new post (fetch game details if missing)
@@ -153,17 +161,14 @@ router.post("/", async (req, res) => {
             game_name = gameQuery.rows[0].name;
         } else {
             console.log(`🔍 Game ID ${game_id} not found in database, fetching from IGDB...`);
-
-            // ✅ Fetch game details from IGDB API
             const gameDetails = await fetchGameDetails(game_id);
             game_name = gameDetails.name;
 
-            // ✅ Save the game in DB if it's new
-            await pool.query("INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", 
-                [game_id, game_name]);
+            // ✅ Save the new game in the database
+            await pool.query("INSERT INTO games (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", [game_id, game_name]);
         }
 
-        // ✅ Insert post with the correct game name
+        // ✅ Insert the post with the correct game name
         const result = await pool.query(
             "INSERT INTO posts (user_id, username, content, game_id, game_name, profile_pic) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
             [user_id, username, content, game_id, game_name, profile_pic]
