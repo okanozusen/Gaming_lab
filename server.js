@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 require("dotenv").config();
-const gamesRoutes = require("./routes/games");
+const gamesRoutes = require("./routes/gamesRoute.js");
 const friendsRoutes = require("./routes/friendsRoutes");
 const postsRoutes = require("./routes/postsRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -32,22 +32,20 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// ✅ Correct Route Mounting
+// ✅ Route Mounting
 app.use("/api/auth", authRoutes);
 app.use("/api/protected", protectedRoutes);
 app.use("/api/users", userRoutes); // ✅ Ensure users API route is mounted correctly
 app.use("/api/messages", messagesRoutes); // ✅ Ensure messages API route is mounted correctly
+app.use("/api/games", gamesRoutes); // ✅ Mount games routes here
+app.use("/api/friends", friendsRoutes);
+app.use("/api/posts", postsRoutes);
 
+// ✅ Correct Route Checking
 console.log("🔍 Checking Registered Routes...");
 app._router.stack.forEach((middleware) => {
-    if (middleware.route) { 
+    if (middleware.route) {
         console.log(`✅ Route: ${middleware.route.path}`);
-    } else if (middleware.name === 'router') {
-        middleware.handle.stack.forEach((route) => {
-            if (route.route) {
-                console.log(`✅ Route: ${route.route.path}`);
-            }
-        });
     }
 });
 
@@ -83,21 +81,8 @@ app.use(async (req, res, next) => {
     next();
 });
 
-// ✅ Route Handlers
-app.use("/api/games", gamesRoutes);
-app.use("/api/friends", friendsRoutes);
-app.use("/api/posts", postsRoutes);
-
-console.log("🔍 Checking Registered Routes...");
-app._router.stack.forEach((middleware) => {
-    if (middleware.route) { 
-        console.log(`✅ Route: ${middleware.route.path}`);
-    }
-});
-
 // ✅ Start the Server
 app.listen(PORT, async () => {
     await getTwitchToken(); // ✅ Fetch token before starting
     console.log(`🚀 Server running on port ${PORT}`);
 });
-

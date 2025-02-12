@@ -41,3 +41,6 @@ yarn-error.log*
 # Ignore IDE configuration files (e.g., VSCode, WebStorm)
 .vscode/
 .idea/
+.env
+
+Gaming_lab/
