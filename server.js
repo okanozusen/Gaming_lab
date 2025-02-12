@@ -26,10 +26,9 @@ const pool = new Pool({
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT || 5432,
-    ssl: {
-        rejectUnauthorized: false, // ✅ Allow SSL connections
-    }
+    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false, // ✅ Ensure SSL works
 });
+
 
 
 const app = express();
@@ -92,6 +91,17 @@ app._router.stack.forEach((middleware) => {
         console.log(`✅ Route: ${middleware.route.path}`);
     }
 });
+
+app.get("/api/test-db", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT NOW();"); // Check database connection
+        res.json({ success: true, time: result.rows[0].now });
+    } catch (error) {
+        console.error("🚨 Database connection error:", error.message);
+        res.status(500).json({ error: "Database connection failed", details: error.message });
+    }
+});
+
 
 // ✅ Start the Server
 app.listen(PORT, async () => {
