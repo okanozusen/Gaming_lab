@@ -94,6 +94,7 @@ router.get("/:username", async (req, res) => {
 });
 
 // ✅ Update profile picture (Using File Upload)
+// ✅ Update Profile Picture with Proper Error Messages
 router.post("/upload-profile-pic", upload.single("profilePic"), async (req, res) => {
     try {
         if (!req.file) {
@@ -101,9 +102,12 @@ router.post("/upload-profile-pic", upload.single("profilePic"), async (req, res)
         }
 
         const { username } = req.body;
-        const fileBuffer = req.file.buffer.toString("base64"); // Convert to base64
+        if (!username) {
+            return res.status(400).json({ error: "Username is required" });
+        }
 
-        // Store base64 image in DB (Slower - consider cloud storage instead)
+        const fileBuffer = req.file.buffer.toString("base64");
+
         const updatePic = await pool.query(
             "UPDATE users SET profile_pic = $1 WHERE LOWER(username) = LOWER($2) RETURNING profile_pic",
             [fileBuffer, username]
@@ -114,14 +118,48 @@ router.post("/upload-profile-pic", upload.single("profilePic"), async (req, res)
         }
 
         res.json({
-            message: "Profile picture updated successfully",
+            message: "Profile picture updated successfully!",
             profilePic: updatePic.rows[0].profile_pic,
         });
     } catch (error) {
         console.error("🚨 Error uploading profile picture:", error.message);
-        res.status(500).json({ error: "Failed to upload profile picture" });
+        res.status(500).json({ error: "Failed to upload profile picture", details: error.message });
     }
 });
+
+// ✅ Add Banner Upload Route (if missing)
+router.post("/upload-banner", upload.single("banner"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const { username } = req.body;
+        if (!username) {
+            return res.status(400).json({ error: "Username is required" });
+        }
+
+        const fileBuffer = req.file.buffer.toString("base64");
+
+        const updateBanner = await pool.query(
+            "UPDATE users SET banner = $1 WHERE LOWER(username) = LOWER($2) RETURNING banner",
+            [fileBuffer, username]
+        );
+
+        if (updateBanner.rowCount === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.json({
+            message: "Banner updated successfully!",
+            banner: updateBanner.rows[0].banner,
+        });
+    } catch (error) {
+        console.error("🚨 Error uploading banner:", error.message);
+        res.status(500).json({ error: "Failed to upload banner", details: error.message });
+    }
+});
+
 
 // ✅ Update user's favorite platforms & genres
 router.post("/update-preferences", async (req, res) => {

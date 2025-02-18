@@ -16,7 +16,6 @@ pool.connect()
     .then(() => console.log("✅ Database Connected Successfully"))
     .catch((err) => console.error("🚨 Database Connection Error:", err));
 
-
 // **🔹 Register New User**
 exports.register = async (req, res) => {
     try {
@@ -28,44 +27,44 @@ exports.register = async (req, res) => {
             return res.status(400).json({ error: "All fields are required." });
         }
 
-        // Password Strength Check
+        // ✅ Ensure email is in lowercase
+        const lowerEmail = email.toLowerCase();
+
+        // ✅ Password Strength Check (at least 8 chars, 1 uppercase, 1 special char)
         const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
         if (!passwordRegex.test(password)) {
-            console.error("❌ Password does not meet criteria.");
+            console.error("❌ Weak Password Attempt.");
             return res.status(400).json({
-                error: "Password must be at least 8 characters long, contain 1 uppercase letter, and 1 special character."
+                error: "Password must be at least 8 characters, contain 1 uppercase letter, and 1 special character."
             });
         }
 
-        // Convert email to lowercase
-        const lowerEmail = email.toLowerCase();
-
-        // Check if user exists
+        // ✅ Check if email or username already exists
         const userExists = await pool.query(
             "SELECT id FROM users WHERE email = $1 OR username = $2",
             [lowerEmail, username]
         );
 
         if (userExists.rowCount > 0) {
-            console.error("❌ Email or username already exists:", { lowerEmail, username });
+            console.error("❌ Email or username already taken:", { lowerEmail, username });
             return res.status(400).json({ error: "Email or username already registered." });
         }
 
-        // Hash Password
+        // ✅ Hash Password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Insert into Database
+        // ✅ Insert into Database
         const result = await pool.query(
             "INSERT INTO users (email, username, password) VALUES ($1, $2, $3) RETURNING id, username, email",
             [lowerEmail, username, hashedPassword]
         );
 
         console.log("✅ User Registered Successfully:", result.rows[0]);
-        res.json({ message: "Registration successful", user: result.rows[0] });
+        return res.json({ message: "Registration successful", user: result.rows[0] });
 
     } catch (error) {
         console.error("🚨 Registration Error:", error);
-        res.status(500).json({ error: "Internal Server Error", details: error.message });
+        return res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 };
 
@@ -73,17 +72,16 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
-        console.log("🔍 Login Attempt - Email:", email);
+        console.log("🔍 Login Attempt:", email);
 
         if (!email || !password) {
             console.error("❌ Missing login fields:", req.body);
             return res.status(400).json({ error: "Email and password are required." });
         }
 
-        // Convert email to lowercase
         const lowerEmail = email.toLowerCase();
 
-        // Fetch user by email
+        // ✅ Fetch user by email
         const userResult = await pool.query(
             "SELECT * FROM users WHERE email = $1",
             [lowerEmail]
@@ -91,26 +89,26 @@ exports.login = async (req, res) => {
 
         if (userResult.rowCount === 0) {
             console.error("❌ No user found:", lowerEmail);
-            return res.status(401).json({ error: "Invalid email or password" });
+            return res.status(401).json({ error: "Invalid email or password." });
         }
 
         const user = userResult.rows[0];
         console.log("✅ User Found:", user.username);
 
-        // Validate Password
+        // ✅ Validate Password
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
             console.error("❌ Incorrect password for:", user.username);
-            return res.status(401).json({ error: "Invalid email or password" });
+            return res.status(401).json({ error: "Invalid email or password." });
         }
 
-        // **Ensure JWT Secret is Available**
+        // ✅ Check JWT Secret
         if (!process.env.JWT_SECRET) {
-            console.error("🚨 JWT Secret is missing in environment variables!");
+            console.error("🚨 JWT Secret Missing!");
             return res.status(500).json({ error: "Server misconfiguration." });
         }
 
-        // Generate JWT Token
+        // ✅ Generate JWT Token
         const token = jwt.sign(
             { id: user.id, username: user.username },
             process.env.JWT_SECRET,
@@ -118,8 +116,7 @@ exports.login = async (req, res) => {
         );
 
         console.log("✅ Login Successful! Token Created.");
-
-        res.json({
+        return res.json({
             message: "Login successful",
             token,
             user: {
@@ -133,7 +130,7 @@ exports.login = async (req, res) => {
 
     } catch (error) {
         console.error("🚨 Login Error:", error);
-        res.status(500).json({ error: "Internal Server Error", details: error.message });
+        return res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 };
 
@@ -171,9 +168,10 @@ exports.getUserProfile = async (req, res) => {
             return res.status(404).json({ error: "User not found." });
         }
 
-        res.json(result.rows[0]);
+        return res.json(result.rows[0]);
+
     } catch (error) {
         console.error("🚨 Profile Fetch Error:", error);
-        res.status(500).json({ error: "Internal Server Error", details: error.message });
+        return res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 };
