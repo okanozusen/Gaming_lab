@@ -157,8 +157,16 @@ app.get("/api/test-db", async (req, res) => {
 });
 
 app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "client/build", "index.html"));
+    const filePath = path.join(__dirname, "client/build", "index.html");
+    
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            console.error("🚨 Error serving index.html:", err.message);
+            res.status(500).send("Internal Server Error: React Build Not Found");
+        }
+    });
 });
+
 
 
 // ✅ Start the Server
