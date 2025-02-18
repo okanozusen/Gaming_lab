@@ -55,7 +55,7 @@ app.use(express.json());
 app.use(cors());
 
 // ✅ Route Mounting
-app.use(express.static(path.join(__dirname, "build")));
+app.use(express.static(path.join(__dirname, "new-frontend/build")));
 app.use("/api/auth", authRoutes);
 app.use("/api/protected", protectedRoutes);
 app.use("/api/users", userRoutes); // ✅ Ensure users API route is mounted correctly
@@ -159,21 +159,8 @@ app.get("/api/test-db", async (req, res) => {
 });
 
 app.get("*", (req, res) => {
-    const filePath = path.join(__dirname, "build", "index.html");
-
-    if (!fs.existsSync(filePath)) {
-        return res.status(500).send("🚨 Error: React build folder not found. Try running 'npm run build'.");
-    }
-
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            console.error("🚨 Error serving index.html:", err.message);
-            res.status(500).send("Internal Server Error: React Build Not Found");
-        }
-    });
+    res.sendFile(path.join(__dirname, "new-frontend/build", "index.html"));
 });
-
-
 
 // ✅ Start the Server
 app.listen(PORT, async () => {
