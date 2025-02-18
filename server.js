@@ -26,6 +26,10 @@ console.log({
     ssl: process.env.DB_SSL
 });
 
+const buildPath = path.join(__dirname, "client/build", "index.html");
+if (!fs.existsSync(buildPath)) {
+    console.error("🚨 React build folder not found. Make sure to run 'npm run build' in the client folder.");
+}
 
 const pool = new Pool({
     user: process.env.DB_USER,
@@ -44,8 +48,6 @@ pool.connect((err, client, release) => {
         release();
     }
 });
-
-
 
 
 const app = express();
@@ -158,7 +160,11 @@ app.get("/api/test-db", async (req, res) => {
 
 app.get("*", (req, res) => {
     const filePath = path.join(__dirname, "client/build", "index.html");
-    
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(500).send("🚨 Error: React build folder not found. Try running 'npm run build'.");
+    }
+
     res.sendFile(filePath, (err) => {
         if (err) {
             console.error("🚨 Error serving index.html:", err.message);
@@ -166,7 +172,6 @@ app.get("*", (req, res) => {
         }
     });
 });
-
 
 
 // ✅ Start the Server
