@@ -52,6 +52,7 @@ app.use(express.json());
 app.use(cors());
 
 // ✅ Route Mounting
+app.use(express.static(path.join(__dirname, "client/build")));
 app.use("/api/auth", authRoutes);
 app.use("/api/protected", protectedRoutes);
 app.use("/api/users", userRoutes); // ✅ Ensure users API route is mounted correctly
@@ -152,6 +153,10 @@ app.get("/api/test-db", async (req, res) => {
         console.error("🚨 Database connection error:", error.message);
         res.status(500).json({ error: "Database connection failed", details: error.message });
     }
+});
+
+app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "client/build", "index.html"));
 });
 
 
